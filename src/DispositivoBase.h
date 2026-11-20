@@ -27,6 +27,8 @@ struct ConfigDispositivo {
   // Identificação / tópicos
   String nomeCliente;   // ClientId MQTT, hostname e id do dispositivo no Home Assistant
   String topicoBase;    // ex.: "campus/portas"
+  bool anexarMac  = true;
+  bool macCurto   = false;
 
   // Home Assistant
   bool homeAssistant = true;          // true: cria as entidades; false: remove

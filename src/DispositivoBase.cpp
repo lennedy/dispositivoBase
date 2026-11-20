@@ -23,6 +23,15 @@ DispositivoBase::DispositivoBase(const ConfigDispositivo& config, const PinosSin
 // ---------------------------------------------------------------------------
 
 void DispositivoBase::iniciar() {
+  if (_cfg.anexarMac) {
+    String mac = WiFi.macAddress();   // "A1:B2:C3:D4:E5:F6"
+    mac.replace(":", "");
+    mac.toLowerCase();
+    if (_cfg.macCurto) mac = mac.substring(6);
+    _cfg.nomeCliente += "-" + mac;
+    _cfg.anexarMac = false;           // evita anexar duas vezes se iniciar() for chamado de novo
+  }
+
   _sinal.iniciar();
 
   montarTopicos();
