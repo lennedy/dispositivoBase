@@ -1,0 +1,20 @@
+{
+  "name": "DispositivoBase",
+  "version": "1.0.0",
+  "description": "Classe base abstrata para dispositivos ESP8266 com MQTT (espMqttClient), sinalizacao por LED/buzzer e descoberta automatica no Home Assistant.",
+  "keywords": "esp8266, mqtt, homeassistant, iot, atuador, sensor",
+  "frameworks": "arduino",
+  "platforms": "espressif8266",
+  "dependencies": [
+    {
+      "owner": "bertmelis",
+      "name": "espMqttClient",
+      "version": "^1.7.0"
+    },
+    {
+      "owner": "bblanchon",
+      "name": "ArduinoJson",
+      "version": "^7.0.0"
+    }
+  ]
+}
