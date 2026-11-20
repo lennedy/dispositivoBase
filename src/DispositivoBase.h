@@ -50,6 +50,13 @@ struct ConfigDispositivo {
   // OTA (ArduinoOTA)
   bool ota = false;
   String senhaOta;
+
+  // OTA por HTTP: o dispositivo baixa o firmware (.bin) de um servidor ao receber
+  // o comando "UPDATE <url>" em <base>/<nome>/cmd.
+  // Só são aceitas URLs que começam com otaUrlPermitida (ex.: "http://192.168.0.10/firmware/").
+  // Com otaUrlPermitida vazio, nenhuma URL é aceita.
+  bool otaHttp = false;
+  String otaUrlPermitida;
 };
 
 /**
@@ -71,6 +78,7 @@ struct ConfigDispositivo {
  *   <base>/<nome>            estado (JSON)
  *   <base>/<nome>/cmd        comandos
  *   <base>/<nome>/available  "online" / "offline" (LWT)
+ *   <base>/<nome>/ota        resultado da atualização por HTTP
  */
 class DispositivoBase {
  public:
@@ -92,6 +100,14 @@ class DispositivoBase {
 
   // Publica o estado imediatamente (além da publicação periódica).
   bool publicarEstado();
+
+  /**
+   * Baixa o firmware da URL (HTTP) e reinicia se a atualização der certo.
+   * Retorna false se a URL for recusada ou a atualização falhar.
+   * O resultado também é publicado em <base>/<nome>/ota.
+   * Bloqueia durante o download.
+   */
+  bool atualizarViaHttp(const String& url);
 
  protected:
   // ----- Implementados pelas classes filhas -------------------------------
@@ -118,7 +134,8 @@ class DispositivoBase {
 
   /**
    * Mensagem recebida em qualquer tópico assinado.
-   * Por padrão, encaminha o tópico de comando para atuador().
+   * Por padrão, no tópico de comando trata "UPDATE <url>" (se otaHttp estiver
+   * habilitado) e encaminha os demais comandos para atuador().
    */
   virtual void aoReceberMensagem(const char* topico, const String& payload);
 
