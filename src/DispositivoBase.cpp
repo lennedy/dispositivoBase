@@ -247,10 +247,12 @@ bool DispositivoBase::publicarEstado() {
   _tEstado = millis();
 
   JsonDocument doc;
-  doc["RSSI"] = WiFi.RSSI();
-  doc["heap"] = ESP.getFreeHeap();
-  doc["stack"] = ESP.getFreeContStack();
-  doc["uptime"] = millis() / 1000;
+  doc["id"] = WiFi.getHostname(); 
+  JsonObject saude = doc["health"].to<JsonObject>();
+  saude["RSSI"] = WiFi.RSSI();
+  saude["heap"] = ESP.getFreeHeap();
+  saude["stack"] = ESP.getFreeContStack();
+  saude["uptime"] = millis() / 1000;
   montarEstado(doc);
 
   String payload;
