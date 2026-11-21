@@ -7,10 +7,6 @@
 #include <ArduinoOTA.h>
 #endif
 
-#ifndef DISPOSITIVO_BASE_SEM_OTA_HTTP
-#include <ESP8266httpUpdate.h>
-#endif
-
 namespace {
 const size_t kTamanhoMaximoComando = 512;  // bytes; mensagens maiores são descartadas
 }
@@ -33,6 +29,11 @@ void DispositivoBase::iniciar() {
   }
 
   _sinal.iniciar();
+
+  if (_cfg.otaServidor && _cfg.otaServidorSenha.length() == 0) {
+    log("OTA servidor desativado: defina otaServidorSenha");
+    _cfg.otaServidor = false;
+  }
 
   montarTopicos();
 
@@ -74,6 +75,14 @@ void DispositivoBase::loop() {
     ArduinoOTA.handle();
   }
 #endif
+
+  if (_cfg.otaServidor && wifiConectado()) {
+    if (!_otaServidor.ativo()) {
+      _otaServidor.iniciar(_cfg.otaServidorPorta, _cfg.otaServidorUsuario, _cfg.otaServidorSenha,
+                           _cfg.nomeCliente, _topicoEstado);
+    }
+    _otaServidor.loop();
+  }
 
   if (_mqtt.connected()) {
     if (agora - _tEstado >= _cfg.intervaloEstadoMs) {
@@ -194,44 +203,18 @@ void DispositivoBase::aoReceberMensagem(const char* topico, const String& payloa
 }
 
 bool DispositivoBase::atualizarViaHttp(const String& url) {
-#ifdef DISPOSITIVO_BASE_SEM_OTA_HTTP
-  (void)url;
-  return false;
-#else
   if (!_cfg.otaHttp) return false;
 
-  // Aceita apenas URLs do servidor de firmware configurado.
-  String permitida = _cfg.otaUrlPermitida;
-  if (permitida.length() == 0 || !url.startsWith("http://")) {
-    publicarEmDispositivo("ota", "recusado");
-    return false;
-  }
-  if (!permitida.endsWith("/")) permitida += "/";  // evita "http://host" casar com "http://host.outro.com"
-  if (!url.startsWith(permitida)) {
-    log("OTA recusado: URL fora do servidor permitido");
-    publicarEmDispositivo("ota", "recusado");
-    return false;
-  }
-
-  log("OTA HTTP: %s", url.c_str());
-  publicarEmDispositivo("ota", "iniciando");
-  _mqtt.loop();  // dá chance de enviar a mensagem antes de bloquear no download
-  _sinal.corRgb(CorLed::Azul);
-
-  WiFiClient cliente;
-  ESPhttpUpdate.rebootOnUpdate(true);
-  const t_httpUpdate_return resultado = ESPhttpUpdate.update(cliente, url);
-
-  // Só chega aqui se NÃO reiniciou (falha ou nada a atualizar).
-  _sinal.corRgb(CorLed::Desligado);
-  if (resultado == HTTP_UPDATE_NO_UPDATES) {
-    publicarEmDispositivo("ota", "sem atualizacao");
-  } else {
-    log("OTA falhou: %s", ESPhttpUpdate.getLastErrorString().c_str());
-    publicarEmDispositivo("ota", "falha: " + ESPhttpUpdate.getLastErrorString());
-  }
-  return false;
-#endif
+  return _otaCliente.atualizar(url, _cfg.otaUrlPermitida, [this](const String& status) {
+    log("OTA HTTP: %s", status.c_str());
+    publicarEmDispositivo("ota", status);
+    if (status == "iniciando") {
+      _mqtt.loop();  // dá chance de enviar a mensagem antes de bloquear no download
+      _sinal.corRgb(CorLed::Azul);
+    } else if (status != "recusado") {
+      _sinal.corRgb(CorLed::Desligado);
+    }
+  });
 }
 
 // ---------------------------------------------------------------------------

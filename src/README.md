@@ -61,7 +61,7 @@ Em `main.cpp`: `dispositivo.iniciar()` no `setup()` e `dispositivo.loop()` no `l
 
 - **ArduinoOTA** (`cfg.ota = true`, senha em `cfg.senhaOta`): envio direto pelo PlatformIO com
   `upload_protocol = espota` e `upload_port = <nome-do-cliente>.local`.
-- **OTA por HTTP** (`cfg.otaUrlPermitida`, ou `URL_FIRMWARE_PERMITIDA` no `DadosMqtt.h`): publique
+- **OTA por HTTP — cliente** (`cfg.otaHttp = true`, `cfg.otaUrlPermitida`, ou `URL_FIRMWARE_PERMITIDA` no `DadosMqtt.h`): publique
   `UPDATE http://<servidor>/firmware/firmware.bin` em `<base>/<nome>/cmd` e o dispositivo baixa o
   `.bin` e reinicia. Só são aceitas URLs que começam com o prefixo configurado (ex.:
   `http://192.168.0.10:8000/firmware/`); com o prefixo vazio o recurso fica desativado.
@@ -69,11 +69,20 @@ Em `main.cpp`: `dispositivo.iniciar()` no `setup()` e `dispositivo.loop()` no `l
   Atenção: HTTP não é criptografado nem autentica o servidor, use apenas em rede confiável e
   proteja o tópico `cmd` com usuário/senha ou ACL no broker. Compile com
   `-D DISPOSITIVO_BASE_SEM_OTA_HTTP` para remover o recurso do binário.
+  Código em `OtaHttpCliente.h/.cpp`.
+- **OTA por HTTP — servidor** (`cfg.otaServidor = true`, `cfg.otaServidorSenha` obrigatória; opcionais
+  `otaServidorPorta`, padrão 80, e `otaServidorUsuario`, padrão `admin`): o dispositivo abre
+  `http://<ip>:<porta>/update`, onde o `.bin` é enviado pelo navegador ou por
+  `curl -u admin:senha -F "firmware=@.pio/build/esp12e/firmware.bin" http://<ip>/update`.
+  Reinicia sozinho após o upload. Autenticação HTTP Basic sem criptografia: só em rede confiável.
+  Código em `OtaHttpServidor.h/.cpp`.
+
+Os modos cliente e servidor são independentes: habilite um, os dois ou nenhum.
 
 ## Diferenças em relação ao código anterior (EspMQTTClient)
 
 - `EspMQTTClient` → `espMqttClient`. Ele **não** gerencia Wi-Fi, OTA nem web updater: o Wi-Fi e a reconexão
-  agora ficam na classe base e o OTA usa `ArduinoOTA` (`cfg.ota = true`). O web updater HTTP não foi portado.
+  agora ficam na classe base e o OTA usa `ArduinoOTA` (`cfg.ota = true`). O web updater HTTP agora existe como `OtaHttpServidor` (`cfg.otaServidor`).
 - A disponibilidade agora é **por dispositivo** (`<base>/<nome>/available`), usada no LWT, na publicação
   periódica e no `availability` do Home Assistant (antes o LWT e o HA usavam `TOPIC_AVAILABLE`, um tópico global que
   podia não ser o mesmo em que `availableSignal()` publicava). `TOPIC_AVAILABLE` foi removido de `DadosMqtt.h`.
