@@ -8,6 +8,8 @@
 
 #include "SinalizacaoLed.h"
 #include "HomeAssistantDiscovery.h"
+#include "OtaHttpCliente.h"
+#include "OtaHttpServidor.h"
 
 /**
  * Configuração de um dispositivo.
@@ -59,6 +61,14 @@ struct ConfigDispositivo {
   // Com otaUrlPermitida vazio, nenhuma URL é aceita.
   bool otaHttp = false;
   String otaUrlPermitida;
+
+  // OTA por servidor HTTP: o dispositivo abre http://<ip>:<porta>/update e recebe o
+  // firmware (.bin) por upload (navegador ou curl). A senha é obrigatória.
+  // Pode ser usado junto com (ou no lugar de) otaHttp.
+  bool otaServidor = false;
+  uint16_t otaServidorPorta = 80;
+  String otaServidorUsuario = "admin";
+  String otaServidorSenha;
 };
 
 /**
@@ -176,6 +186,8 @@ class DispositivoBase {
   espMqttClient _mqtt;
   SinalizacaoLed _sinal;
   HomeAssistantDiscovery _ha;
+  OtaHttpCliente _otaCliente;
+  OtaHttpServidor _otaServidor;
 
   String _topicoDispositivo;
   String _topicoEstado;
