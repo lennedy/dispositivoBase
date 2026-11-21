@@ -78,7 +78,8 @@ void DispositivoBase::loop() {
 
   if (_cfg.otaServidor && wifiConectado()) {
     if (!_otaServidor.ativo()) {
-      _otaServidor.iniciar(_cfg.otaServidorPorta, _cfg.otaServidorUsuario, _cfg.otaServidorSenha);
+      _otaServidor.iniciar(_cfg.otaServidorPorta, _cfg.otaServidorUsuario, _cfg.otaServidorSenha,
+                           _cfg.nomeCliente, _topicoEstado);
     }
     _otaServidor.loop();
   }

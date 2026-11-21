@@ -21,8 +21,12 @@
  */
 class OtaHttpServidor {
  public:
-  /** Abre o servidor. Chamar quando o Wi-Fi estiver conectado. */
-  void iniciar(uint16_t porta, const String& usuario, const String& senha);
+  /**
+   * Abre o servidor. Chamar quando o Wi-Fi estiver conectado.
+   * `nome` e `topicoStatus` são apenas exibidos na página de envio.
+   */
+  void iniciar(uint16_t porta, const String& usuario, const String& senha,
+               const String& nome, const String& topicoStatus);
 
   /** Atende as requisições; chamar a cada loop() enquanto ativo(). */
   void loop();
@@ -30,7 +34,13 @@ class OtaHttpServidor {
   bool ativo() const { return _servidor != nullptr; }
 
  private:
+  String paginaEnvio() const;
+
   std::unique_ptr<ESP8266WebServer> _servidor;
+  String _usuario;
+  String _senha;
+  String _nome;
+  String _topicoStatus;
   ESP8266HTTPUpdateServer _atualizador;
 };
 
