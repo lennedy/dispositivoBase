@@ -31,6 +31,10 @@ struct PinosSinalizacao {
 
   bool ledConexaoAtivoBaixo = true;  // true: LOW acende o LED de conexão
   bool rgbAnodoComum        = true;  // true: LOW acende cada cor do LED RGB
+
+  // Nem todas as placas têm LED RGB. Com false, os pinos do RGB não são
+  // configurados e qualquer comando de cor é ignorado.
+  bool rgbHabilitado        = true;
 };
 
 /**
@@ -56,6 +60,7 @@ class SinalizacaoLed {
   void definirIntervaloPisca(uint32_t ms) { _intervaloPisca = ms; }
 
   // --- LED RGB ----------------------------------------------------------
+  bool rgbHabilitado() const { return _pinos.rgbHabilitado; }
   void corRgb(CorLed cor);                          // cor fixa
   void piscarCor(CorLed cor, uint32_t duracaoMs);   // cor por um tempo, depois apaga
 

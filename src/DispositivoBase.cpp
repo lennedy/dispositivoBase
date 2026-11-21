@@ -29,6 +29,9 @@ void DispositivoBase::iniciar() {
   }
 
   _sinal.iniciar();
+  if (!_sinal.rgbHabilitado()) {
+    log("LED RGB desabilitado: configuracao e controle do LED RGB ignorados");
+  }
 
   if (_cfg.otaServidor && _cfg.otaServidorSenha.length() == 0) {
     log("OTA servidor desativado: defina otaServidorSenha");

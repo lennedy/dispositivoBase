@@ -47,6 +47,19 @@ Ganchos opcionais (`override`): `aoIniciar()`, `aoConectar()`, `montarEstado(doc
 
 Em `main.cpp`: `dispositivo.iniciar()` no `setup()` e `dispositivo.loop()` no `loop()`.
 
+## LED RGB opcional
+
+Nem toda placa tem LED RGB. Em `PinosSinalizacao`, `rgbHabilitado = false` desativa a
+configuração dos pinos e o controle do LED (as chamadas de cor viram no-op) e, ao iniciar,
+o log (Serial) informa: `LED RGB desabilitado: configuracao e controle do LED RGB ignorados`.
+O padrão é `true`.
+
+```cpp
+PinosSinalizacao pinos;
+pinos.rgbHabilitado = false;
+FechaduraNFC dispositivo(cfg, pinos);
+```
+
 ## Tópicos
 
 | Tópico | Conteúdo |
