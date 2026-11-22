@@ -16,9 +16,11 @@ void SinalizacaoLed::configurarSaida(int8_t pino) {
 
 void SinalizacaoLed::iniciar() {
   configurarSaida(_pinos.ledConexao);
-  configurarSaida(_pinos.vermelho);
-  configurarSaida(_pinos.verde);
-  configurarSaida(_pinos.azul);
+  if (_pinos.rgbHabilitado) {
+    configurarSaida(_pinos.vermelho);
+    configurarSaida(_pinos.verde);
+    configurarSaida(_pinos.azul);
+  }
   configurarSaida(_pinos.buzzer);
 
   escreverRgb(CorLed::Desligado);
@@ -64,6 +66,8 @@ void SinalizacaoLed::atualizarLedConexao(uint32_t agora) {
 // ---------------------------------------------------------------------------
 
 void SinalizacaoLed::escreverRgb(CorLed cor) {
+  if (!_pinos.rgbHabilitado) return;
+
   bool r = false, g = false, b = false;
 
   switch (cor) {
@@ -90,11 +94,13 @@ void SinalizacaoLed::escreverRgb(CorLed cor) {
 }
 
 void SinalizacaoLed::corRgb(CorLed cor) {
+  if (!_pinos.rgbHabilitado) return;
   _rgbTemporario = false;
   escreverRgb(cor);
 }
 
 void SinalizacaoLed::piscarCor(CorLed cor, uint32_t duracaoMs) {
+  if (!_pinos.rgbHabilitado) return;
   escreverRgb(cor);
   _rgbTemporario = true;
   _rgbFim = millis() + duracaoMs;
