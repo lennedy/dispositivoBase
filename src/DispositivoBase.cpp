@@ -45,6 +45,11 @@ void DispositivoBase::iniciar() {
   WiFi.hostname(_cfg.nomeCliente);
   WiFi.begin(_cfg.ssid.c_str(), _cfg.senhaWifi.c_str());
 
+  // NTP: não bloqueia; o SNTP sincroniza assim que o Wi-Fi conectar e repete até conseguir.
+  if (_cfg.ntp) {
+    _relogio.begin(_cfg.ntpServidor1.c_str(), _cfg.ntpServidor2.c_str(), _cfg.ntpServidor3.c_str());
+  }
+
   configurarMqtt();
 
   HomeAssistantDiscovery::InfoDispositivo info;
@@ -239,6 +244,10 @@ bool DispositivoBase::publicarEstado() {
   saude["heap"] = ESP.getFreeHeap();
   saude["stack"] = ESP.getFreeContStack();
   saude["uptime"] = millis() / 1000;
+  char horario[RelogioNTP::TAM_ISO8601];
+  if (_relogio.horarioISO8601(horario, sizeof(horario))) {
+    doc["timestamp"] = horario;   // ArduinoJson copia a string
+  }
   montarEstado(doc);
 
   String payload;

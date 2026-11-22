@@ -20,6 +20,7 @@ lib/
       DispositivoBase.h/.cpp          classe mãe abstrata (Wi-Fi, MQTT, ciclo de vida)
       SinalizacaoLed.h/.cpp           LED de conexão, LED RGB e buzzer (não bloqueante)
       HomeAssistantDiscovery.h/.cpp   MQTT Discovery do Home Assistant
+      RelogioNTP.h/.cpp               horário por NTP (UTC): string ISO 8601 e epoch
   PN532/ PN532_I2C/      bibliotecas do leitor NFC (do projeto original)
 ```
 
@@ -59,6 +60,37 @@ PinosSinalizacao pinos;
 pinos.rgbHabilitado = false;
 FechaduraNFC dispositivo(cfg, pinos);
 ```
+
+## Horário (NTP)
+
+O `DispositivoBase` sincroniza o relógio por NTP (`RelogioNTP.h/.cpp`). O horário é sempre **UTC**.
+
+- A sincronização é tentada **a cada boot** (não bloqueia o `iniciar()`): o SNTP começa quando o Wi-Fi
+  conectar e repete até conseguir.
+- Depois da primeira sincronização o horário **continua correndo** mesmo sem acesso ao servidor NTP.
+  Como o ESP8266 não tem RTC, um reinício apaga o horário até a próxima sincronização.
+- Servidores configuráveis em `ConfigDispositivo` (até 3, nome ou IP; deixe vazio o que não usar):
+
+```cpp
+cfg.ntpServidor1 = "ntp.meucampus.local";  // padrão: pool.ntp.br
+cfg.ntpServidor2 = "a.st1.ntp.br";         // padrão
+cfg.ntpServidor3 = "";                     // não usar
+cfg.ntp = true;                            // false desativa o NTP
+```
+
+  Também é possível trocar em tempo de execução: `definirServidoresNtp("10.0.0.1", "pool.ntp.br")`.
+
+| Método | Retorno |
+|---|---|
+| `horarioValido()` | `true` se já sincronizou desde o boot |
+| `horarioEpoch()` | `uint32_t`, segundos desde 1970 (UTC); `0` se inválido |
+| `horarioISO8601()` | `String` `"2026-11-17T16:30:00Z"`; vazia se inválido |
+| `horarioISO8601(buf, tam)` | mesmo valor em buffer (`RelogioNTP::TAM_ISO8601` = 21 bytes), sem usar heap |
+| `relogio()` | acesso a `aguardarSincronizacao(ms)`, `ultimaSincronizacao()` etc. |
+
+O estado JSON publicado em `<base>/<nome>` ganha o campo `"timestamp"` (ISO 8601) quando o horário é válido.
+O epoch é `uint32_t` (vale até 2106) e não `float`, que perde precisão com valores dessa grandeza.
+Requer o core Arduino do ESP8266 3.0 ou superior.
 
 ## Tópicos
 

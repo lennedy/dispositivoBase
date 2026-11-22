@@ -10,6 +10,7 @@
 #include "HomeAssistantDiscovery.h"
 #include "OtaHttpCliente.h"
 #include "OtaHttpServidor.h"
+#include "RelogioNTP.h"
 
 /**
  * Configuração de um dispositivo.
@@ -40,6 +41,14 @@ struct ConfigDispositivo {
   String fabricante;
   String versaoSw = "1.0.0";
   String versaoHw = "1.0";
+
+  // Relógio (NTP). Horário sempre em UTC. A sincronização é tentada a cada boot e
+  // o horário continua correndo se o servidor ficar inacessível.
+  // Até 3 servidores (nome ou IP); deixe vazio os que não for usar.
+  bool ntp = true;
+  String ntpServidor1 = "pool.ntp.br";
+  String ntpServidor2 = "a.st1.ntp.br";
+  String ntpServidor3 = "time.google.com";
 
   // Temporização (ms)
   uint32_t intervaloEstadoMs = 20000;          // publicação do estado (JSON)
@@ -112,6 +121,28 @@ class DispositivoBase {
 
   // Publica o estado imediatamente (além da publicação periódica).
   bool publicarEstado();
+
+  // ----- Horário (NTP, UTC) -----------------------------------------------
+
+  /** true se o horário é confiável (sincronizou ao menos uma vez desde o boot). */
+  bool horarioValido() const { return _relogio.horarioValido(); }
+
+  /** Unix epoch em segundos (uint32_t). 0 se ainda não houver horário válido. */
+  uint32_t horarioEpoch() const { return _relogio.epoch(); }
+
+  /** "2026-11-17T16:30:00Z" em buf (mín. RelogioNTP::TAM_ISO8601 bytes). false se inválido. */
+  bool horarioISO8601(char* buf, size_t tam) const { return _relogio.horarioISO8601(buf, tam); }
+
+  /** Mesmo que acima, como String (usa heap). "" se inválido. */
+  String horarioISO8601() const { return _relogio.horarioISO8601(); }
+
+  /** Troca os servidores NTP em tempo de execução. */
+  void definirServidoresNtp(const char* s1, const char* s2 = nullptr, const char* s3 = nullptr) {
+    _relogio.begin(s1, s2, s3);
+  }
+
+  /** Acesso completo ao relógio (ex.: aguardarSincronizacao(), ultimaSincronizacao()). */
+  RelogioNTP& relogio() { return _relogio; }
 
   /**
    * Baixa o firmware da URL (HTTP) e reinicia se a atualização der certo.
@@ -188,6 +219,7 @@ class DispositivoBase {
   HomeAssistantDiscovery _ha;
   OtaHttpCliente _otaCliente;
   OtaHttpServidor _otaServidor;
+  RelogioNTP _relogio;
 
   String _topicoDispositivo;
   String _topicoEstado;
