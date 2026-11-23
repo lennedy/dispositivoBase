@@ -212,6 +212,7 @@ class DispositivoBase {
                       size_t indice, size_t total);
   void publicarDisponibilidade();
   void sincronizarHomeAssistant();
+  uint32_t horarioStart();
 
   ConfigDispositivo _cfg;
   espMqttClient _mqtt;

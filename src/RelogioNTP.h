@@ -59,6 +59,9 @@ public:
   /** Formata um epoch qualquer em ISO 8601 UTC. Função pura, sem dependência de hardware. */
   static bool formatarISO8601(uint32_t epoch, char* buf, size_t tam);
 
+  uint32_t firstSyncTime();
+  inline uint32_t getAtrasoPrimeiraSync(){return _atrasoPrimeiraSync;}
+
 private:
   static void aoSincronizar();     // callback do SNTP (contexto lwIP: manter mínimo)
   static RelogioNTP* _instancia;
@@ -66,4 +69,7 @@ private:
   String _servidores[MAX_SERVIDORES];
   volatile bool _sincronizado = false;
   volatile uint32_t _ultimaSync = 0;
+  uint32_t _tempoPrimeiraSync = 0;
+  uint32_t _atrasoPrimeiraSync=0;
+  uint32_t _atrasoUltimaSync=0;
 };

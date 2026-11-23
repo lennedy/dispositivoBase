@@ -11,7 +11,19 @@ void RelogioNTP::aoSincronizar() {
   if (_instancia) {
     _instancia->_ultimaSync = (uint32_t)time(nullptr);
     _instancia->_sincronizado = true;
+    if( _instancia->ultimaSincronizacao() == 0 ){
+      _instancia->_atrasoPrimeiraSync = millis();
+    }
+     _instancia->_atrasoUltimaSync = millis()/1000;
   }
+}
+
+uint32_t RelogioNTP::firstSyncTime(){
+ 
+  if (_tempoPrimeiraSync == 0){
+    _tempoPrimeiraSync = ultimaSincronizacao();
+  }
+  return _tempoPrimeiraSync;
 }
 
 void RelogioNTP::begin(const char* s1, const char* s2, const char* s3) {
