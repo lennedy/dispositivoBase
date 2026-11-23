@@ -136,6 +136,15 @@ class DispositivoBase {
   /** Mesmo que acima, como String (usa heap). "" se inválido. */
   String horarioISO8601() const { return _relogio.horarioISO8601(); }
 
+  /** Epoch (s, UTC) em que o dispositivo ligou. 0 até a 1ª sincronização NTP. */
+  uint32_t horarioStart() const { return _relogio.horarioInicio(); }
+
+  /** Tempo em ms entre o boot e a 1ª sincronização NTP. 0 até lá. */
+  uint32_t atrasoPrimeiraSyncMs() const { return _relogio.atrasoPrimeiraSyncMs(); }
+
+  /** Epoch (s, UTC) da última sincronização NTP. 0 se nunca sincronizou. */
+  uint32_t horarioUltimaSync() const { return _relogio.ultimaSincronizacao(); }
+
   /** Troca os servidores NTP em tempo de execução. */
   void definirServidoresNtp(const char* s1, const char* s2 = nullptr, const char* s3 = nullptr) {
     _relogio.begin(s1, s2, s3);
@@ -212,7 +221,6 @@ class DispositivoBase {
                       size_t indice, size_t total);
   void publicarDisponibilidade();
   void sincronizarHomeAssistant();
-  uint32_t horarioStart();
 
   ConfigDispositivo _cfg;
   espMqttClient _mqtt;

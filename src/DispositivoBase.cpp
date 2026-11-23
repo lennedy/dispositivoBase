@@ -110,10 +110,6 @@ void DispositivoBase::loop() {
   _sinal.atualizar();
 }
 
-uint32_t DispositivoBase::horarioStart(){  
-  return _relogio.firstSyncTime() - _relogio.getAtrasoPrimeiraSync();
-}
-
 // ---------------------------------------------------------------------------
 // Configuração
 // ---------------------------------------------------------------------------
@@ -247,8 +243,8 @@ bool DispositivoBase::publicarEstado() {
   saude["RSSI"] = WiFi.RSSI();
   saude["heap"] = ESP.getFreeHeap();
   saude["stack"] = ESP.getFreeContStack();
-  saude["uptime"] = horarioStart();
-  saude["NTP_d"] = _relogio.getAtrasoPrimeiraSync();
+  saude["uptime"] = _relogio.horarioInicio();           // epoch (s, UTC) em que ligou; 0 até a 1ª sincronização
+  saude["ntp_d"] = _relogio.atrasoPrimeiraSyncMs();     // ms entre o boot e a 1ª sincronização; 0 até lá
   char horario[RelogioNTP::TAM_ISO8601];
   if (_relogio.horarioISO8601(horario, sizeof(horario))) {
     doc["timestamp"] = horario;   // ArduinoJson copia a string

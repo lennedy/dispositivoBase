@@ -86,9 +86,15 @@ cfg.ntp = true;                            // false desativa o NTP
 | `horarioEpoch()` | `uint32_t`, segundos desde 1970 (UTC); `0` se inválido |
 | `horarioISO8601()` | `String` `"2026-11-17T16:30:00Z"`; vazia se inválido |
 | `horarioISO8601(buf, tam)` | mesmo valor em buffer (`RelogioNTP::TAM_ISO8601` = 21 bytes), sem usar heap |
+| `horarioStart()` | `uint32_t`, epoch (s, UTC) em que o dispositivo ligou; `0` até a 1ª sincronização |
+| `atrasoPrimeiraSyncMs()` | `uint32_t`, **milissegundos** entre o boot e a 1ª sincronização; `0` até lá |
+| `horarioUltimaSync()` | `uint32_t`, epoch (s, UTC) da última sincronização; `0` se nunca |
 | `relogio()` | acesso a `aguardarSincronizacao(ms)`, `ultimaSincronizacao()` etc. |
 
 O estado JSON publicado em `<base>/<nome>` ganha o campo `"timestamp"` (ISO 8601) quando o horário é válido.
+Em `health`, `"uptime"` é o epoch (s) em que o dispositivo ligou e `"ntp_d"` é o tempo (ms) entre o boot e a
+1ª sincronização; ambos valem `0` até a 1ª sincronização. O horário de ligação é calculado uma única vez
+(1ª sincronização menos o tempo desde o boot) e tem precisão de cerca de 1 s.
 O epoch é `uint32_t` (vale até 2106) e não `float`, que perde precisão com valores dessa grandeza.
 Requer o core Arduino do ESP8266 3.0 ou superior.
 
@@ -96,7 +102,7 @@ Requer o core Arduino do ESP8266 3.0 ou superior.
 
 | Tópico | Conteúdo |
 |---|---|
-| `<base>/<nome>` | estado em JSON (RSSI, heap, stack, uptime + campos da filha), periódico |
+| `<base>/<nome>` | estado em JSON (RSSI, heap, stack, uptime = horário de ligação, ntp_d + campos da filha), periódico |
 | `<base>/<nome>/cmd` | comandos recebidos (chamam `atuador()`) |
 | `<base>/<nome>/available` | `online` (retido) / `offline` (LWT) |
 | `<base>/<nome>/ota` | resultado da atualização por HTTP (`iniciando`, `recusado`, `sem atualizacao`, `falha: ...`) |

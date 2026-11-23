@@ -47,8 +47,24 @@ public:
   /** Unix epoch (s, UTC). Retorna 0 se ainda não houver horário válido. */
   uint32_t epoch() const;
 
-  /** Epoch da última sincronização bem-sucedida (0 se nunca). */
+  /** Epoch (s, UTC) da última sincronização bem-sucedida (0 se nunca). */
   uint32_t ultimaSincronizacao() const { return _ultimaSync; }
+
+  /** Epoch (s, UTC) da primeira sincronização desde o boot (0 se nunca). Não muda depois. */
+  uint32_t primeiraSincronizacao() const { return _primeiraSync; }
+
+  /**
+   * Epoch (s, UTC) em que o dispositivo ligou: horário da 1ª sincronização menos o
+   * tempo decorrido desde o boot. Fixado na 1ª sincronização e não muda mais
+   * (precisão de ~1 s). Retorna 0 até a 1ª sincronização.
+   */
+  uint32_t horarioInicio() const { return _inicio; }
+
+  /**
+   * Tempo, em MILISSEGUNDOS, entre o boot e a 1ª sincronização (0 se nunca sincronizou).
+   * Para segundos, divida por 1000.
+   */
+  uint32_t atrasoPrimeiraSyncMs() const { return _atrasoPrimeiraSyncMs; }
 
   /** Escreve "2026-11-17T16:30:00Z" em buf. Retorna false (e buf="") se sem horário válido. */
   bool horarioISO8601(char* buf, size_t tam) const;
@@ -59,9 +75,6 @@ public:
   /** Formata um epoch qualquer em ISO 8601 UTC. Função pura, sem dependência de hardware. */
   static bool formatarISO8601(uint32_t epoch, char* buf, size_t tam);
 
-  uint32_t firstSyncTime();
-  inline uint32_t getAtrasoPrimeiraSync(){return _atrasoPrimeiraSync;}
-
 private:
   static void aoSincronizar();     // callback do SNTP (contexto lwIP: manter mínimo)
   static RelogioNTP* _instancia;
@@ -69,7 +82,7 @@ private:
   String _servidores[MAX_SERVIDORES];
   volatile bool _sincronizado = false;
   volatile uint32_t _ultimaSync = 0;
-  uint32_t _tempoPrimeiraSync = 0;
-  uint32_t _atrasoPrimeiraSync=0;
-  uint32_t _atrasoUltimaSync=0;
+  volatile uint32_t _primeiraSync = 0;          // epoch (s)
+  volatile uint32_t _inicio = 0;                // epoch (s) do boot
+  volatile uint32_t _atrasoPrimeiraSyncMs = 0;  // ms desde o boot até a 1ª sincronização
 };

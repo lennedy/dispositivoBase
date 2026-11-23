@@ -8,22 +8,21 @@
 RelogioNTP* RelogioNTP::_instancia = nullptr;
 
 void RelogioNTP::aoSincronizar() {
-  if (_instancia) {
-    _instancia->_ultimaSync = (uint32_t)time(nullptr);
-    _instancia->_sincronizado = true;
-    if( _instancia->ultimaSincronizacao() == 0 ){
-      _instancia->_atrasoPrimeiraSync = millis();
-    }
-     _instancia->_atrasoUltimaSync = millis()/1000;
-  }
-}
+  RelogioNTP* r = _instancia;
+  if (!r) return;
 
-uint32_t RelogioNTP::firstSyncTime(){
- 
-  if (_tempoPrimeiraSync == 0){
-    _tempoPrimeiraSync = ultimaSincronizacao();
+  // O relógio do sistema já foi ajustado quando este callback é chamado.
+  const uint32_t agora = (uint32_t)time(nullptr);
+  const uint32_t ms = millis();
+
+  // Só a 1ª sincronização fixa o horário de ligação (testa _primeiraSync, não _ultimaSync).
+  if (r->_primeiraSync == 0) {
+    r->_atrasoPrimeiraSyncMs = ms;          // ms
+    r->_inicio = agora - ms / 1000;         // s: converte ms para s antes de subtrair
+    r->_primeiraSync = agora;
   }
-  return _tempoPrimeiraSync;
+  r->_ultimaSync = agora;
+  r->_sincronizado = true;
 }
 
 void RelogioNTP::begin(const char* s1, const char* s2, const char* s3) {
