@@ -43,7 +43,7 @@ class MeuDispositivo : public DispositivoBase {
 };
 ```
 
-Ganchos opcionais (`override`): `aoIniciar()`, `aoConectar()`, `montarEstado(doc)`,
+Ganchos opcionais (`override`): `aoIniciar()`, `aoConectar()`, `montarEstado(doc)` (campos extras do status), `montarMedicao(doc)` (array `measurements`),
 `configurarHomeAssistant(ha)`, `aoReceberMensagem(topico, payload)`.
 
 Em `main.cpp`: `dispositivo.iniciar()` no `setup()` e `dispositivo.loop()` no `loop()`.
@@ -102,7 +102,8 @@ Requer o core Arduino do ESP8266 3.0 ou superior.
 
 | Tópico | Conteúdo |
 |---|---|
-| `<base>/<nome>` | estado em JSON (RSSI, heap, stack, uptime = horário de ligação, ntp_d + campos da filha), periódico |
+| `<base>/<nome>` | **status** em JSON: `id`, `health` (RSSI, heap, stack, uptime = horário de ligação, ntp_d), `timestamp`; periódico (`intervaloEstadoMs`) |
+| `<base>/<nome>/medicao` | **medição** em JSON: `id` e `measurements` (preenchido pela filha em `montarMedicao()`); periódico (`intervaloMedicaoMs`) |
 | `<base>/<nome>/cmd` | comandos recebidos (chamam `atuador()`) |
 | `<base>/<nome>/available` | `online` (retido) / `offline` (LWT) |
 | `<base>/<nome>/ota` | resultado da atualização por HTTP (`iniciando`, `recusado`, `sem atualizacao`, `falha: ...`) |

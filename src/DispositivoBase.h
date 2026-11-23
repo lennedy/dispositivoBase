@@ -51,7 +51,8 @@ struct ConfigDispositivo {
   String ntpServidor3 = "time.google.com";
 
   // Temporização (ms)
-  uint32_t intervaloEstadoMs = 20000;          // publicação do estado (JSON)
+  uint32_t intervaloEstadoMs = 20000;          // publicação do status/saúde (JSON) em <base>/<nome>
+  uint32_t intervaloMedicaoMs = 20000;         // publicação da medição (JSON) em <base>/<nome>/medicao
   uint32_t intervaloDisponibilidadeMs = 60000; // publicação de "online"
   uint32_t intervaloSensorMs = 5000;           // chamada de sensor()
   uint32_t intervaloReconexaoMs = 5000;        // tentativas de conexão ao broker
@@ -95,8 +96,9 @@ struct ConfigDispositivo {
  *   - atuador(payload): executa um comando recebido em <base>/<nome>/cmd;
  *   - sensor(): lê o(s) sensor(es) e publica o que for necessário.
  *
- * Tópicos:
- *   <base>/<nome>            estado (JSON)
+ * Tópicos (com <base> = "cm/<tipo de sensor>"):
+ *   <base>/<nome>            status (JSON): id, health, timestamp
+ *   <base>/<nome>/medicao    medição (JSON): id, measurements
  *   <base>/<nome>/cmd        comandos
  *   <base>/<nome>/available  "online" / "offline" (LWT)
  *   <base>/<nome>/ota        resultado da atualização por HTTP
@@ -119,8 +121,11 @@ class DispositivoBase {
   bool wifiConectado() const { return WiFi.status() == WL_CONNECTED; }
   bool mqttConectado() { return _mqtt.connected(); }
 
-  // Publica o estado imediatamente (além da publicação periódica).
+  // Publica o status (saúde do dispositivo) imediatamente, além da publicação periódica.
   bool publicarEstado();
+
+  // Publica a medição imediatamente, além da publicação periódica.
+  bool publicarMedicao();
 
   // ----- Horário (NTP, UTC) -----------------------------------------------
 
@@ -178,8 +183,17 @@ class DispositivoBase {
   /** Chamado a cada conexão (ou reconexão) ao broker, após o setup padrão. */
   virtual void aoConectar() {}
 
-  /** Acrescenta campos ao JSON de estado publicado periodicamente. */
+  /**
+   * Acrescenta campos extras ao JSON de STATUS (<base>/<nome>), que já traz
+   * id, health e timestamp. Não coloque medições aqui: use montarMedicao().
+   */
   virtual void montarEstado(JsonDocument& doc) { (void)doc; }
+
+  /**
+   * Preenche o JSON de MEDIÇÃO (<base>/<nome>/medicao), que já traz o id.
+   * A classe filha adiciona aqui o array "measurements".
+   */
+  virtual void montarMedicao(JsonDocument& doc) { (void)doc; }
 
   /** Cria as entidades do dispositivo no Home Assistant. */
   virtual void configurarHomeAssistant(HomeAssistantDiscovery& ha) { (void)ha; }
@@ -206,6 +220,7 @@ class DispositivoBase {
   const String& nomeCliente() const { return _cfg.nomeCliente; }
   const String& topicoBase() const { return _cfg.topicoBase; }
   const String& topicoEstado() const { return _topicoEstado; }
+  const String& topicoMedicao() const { return _topicoMedicao; }
   const String& topicoComando() const { return _topicoComando; }
   const String& topicoDisponibilidade() const { return _topicoDisponibilidade; }
 
@@ -232,6 +247,7 @@ class DispositivoBase {
 
   String _topicoDispositivo;
   String _topicoEstado;
+  String _topicoMedicao;
   String _topicoComando;
   String _topicoDisponibilidade;
 
@@ -239,6 +255,7 @@ class DispositivoBase {
   bool _descartarMensagem = false;
 
   uint32_t _tEstado = 0;
+  uint32_t _tMedicao = 0;
   uint32_t _tDisponibilidade = 0;
   uint32_t _tSensor = 0;
   uint32_t _tConexao = 0;

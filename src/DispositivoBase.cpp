@@ -96,6 +96,9 @@ void DispositivoBase::loop() {
     if (agora - _tEstado >= _cfg.intervaloEstadoMs) {
       publicarEstado();
     }
+    if (agora - _tMedicao >= _cfg.intervaloMedicaoMs) {
+      publicarMedicao();
+    }
     if (agora - _tDisponibilidade >= _cfg.intervaloDisponibilidadeMs) {
       publicarDisponibilidade();
     }
@@ -116,7 +119,8 @@ void DispositivoBase::loop() {
 
 void DispositivoBase::montarTopicos() {
   _topicoDispositivo = _cfg.topicoBase + "/" + _cfg.nomeCliente;
-  _topicoEstado = _topicoDispositivo;
+  _topicoEstado = _topicoDispositivo;                  // <base>/<nome>
+  _topicoMedicao = _topicoDispositivo + "/medicao";    // <base>/<nome>/medicao
   _topicoComando = _topicoDispositivo + "/cmd";
   _topicoDisponibilidade = _topicoDispositivo + "/available";
 }
@@ -167,6 +171,7 @@ void DispositivoBase::aoConectarMqtt(bool sessaoExistente) {
   publicarDisponibilidade();
   sincronizarHomeAssistant();
   publicarEstado();
+  publicarMedicao();
 
   aoConectar();
 }
@@ -237,8 +242,9 @@ void DispositivoBase::publicarDisponibilidade() {
 bool DispositivoBase::publicarEstado() {
   _tEstado = millis();
 
+  // Status: saúde do dispositivo, timestamp e id. As medições vão em <base>/<nome>/medicao.
   JsonDocument doc;
-  doc["id"] = WiFi.getHostname(); 
+  doc["id"] = WiFi.getHostname();
   JsonObject saude = doc["health"].to<JsonObject>();
   saude["RSSI"] = WiFi.RSSI();
   saude["heap"] = ESP.getFreeHeap();
@@ -249,11 +255,24 @@ bool DispositivoBase::publicarEstado() {
   if (_relogio.horarioISO8601(horario, sizeof(horario))) {
     doc["timestamp"] = horario;   // ArduinoJson copia a string
   }
-  montarEstado(doc);
+  montarEstado(doc);              // campos extras opcionais da filha
 
   String payload;
   serializeJson(doc, payload);
   return publicar(_topicoEstado, payload);
+}
+
+bool DispositivoBase::publicarMedicao() {
+  _tMedicao = millis();
+
+  // Medição: apenas id e measurements (preenchido pela filha em montarMedicao()).
+  JsonDocument doc;
+  doc["id"] = WiFi.getHostname();
+  montarMedicao(doc);
+
+  String payload;
+  serializeJson(doc, payload);
+  return publicar(_topicoMedicao, payload);
 }
 
 void DispositivoBase::sincronizarHomeAssistant() {
@@ -263,7 +282,7 @@ void DispositivoBase::sincronizarHomeAssistant() {
   rssi.idObjeto = "rssi";
   rssi.nome = "Sinal Wi-Fi";
   rssi.topicoEstado = _topicoEstado.c_str();
-  rssi.templateValor = "{{ value_json.RSSI }}";
+  rssi.templateValor = "{{ value_json.health.RSSI }}";
   rssi.classeDispositivo = "signal_strength";
   rssi.unidade = "dBm";
   rssi.classeEstado = "measurement";
