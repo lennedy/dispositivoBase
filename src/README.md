@@ -20,6 +20,7 @@ lib/
       DispositivoBase.h/.cpp          classe mãe abstrata (Wi-Fi, MQTT, ciclo de vida)
       SinalizacaoLed.h/.cpp           LED de conexão, LED RGB e buzzer (não bloqueante)
       HomeAssistantDiscovery.h/.cpp   MQTT Discovery do Home Assistant
+      RelogioNTP.h/.cpp               horário por NTP (UTC): string ISO 8601 e epoch
   PN532/ PN532_I2C/      bibliotecas do leitor NFC (do projeto original)
 ```
 
@@ -42,7 +43,7 @@ class MeuDispositivo : public DispositivoBase {
 };
 ```
 
-Ganchos opcionais (`override`): `aoIniciar()`, `aoConectar()`, `montarEstado(doc)`,
+Ganchos opcionais (`override`): `aoIniciar()`, `aoConectar()`, `montarEstado(doc)` (campos extras do status), `montarMedicao(doc)` (array `measurements`),
 `configurarHomeAssistant(ha)`, `aoReceberMensagem(topico, payload)`.
 
 Em `main.cpp`: `dispositivo.iniciar()` no `setup()` e `dispositivo.loop()` no `loop()`.
@@ -60,11 +61,49 @@ pinos.rgbHabilitado = false;
 FechaduraNFC dispositivo(cfg, pinos);
 ```
 
+## Horário (NTP)
+
+O `DispositivoBase` sincroniza o relógio por NTP (`RelogioNTP.h/.cpp`). O horário é sempre **UTC**.
+
+- A sincronização é tentada **a cada boot** (não bloqueia o `iniciar()`): o SNTP começa quando o Wi-Fi
+  conectar e repete até conseguir.
+- Depois da primeira sincronização o horário **continua correndo** mesmo sem acesso ao servidor NTP.
+  Como o ESP8266 não tem RTC, um reinício apaga o horário até a próxima sincronização.
+- Servidores configuráveis em `ConfigDispositivo` (até 3, nome ou IP; deixe vazio o que não usar):
+
+```cpp
+cfg.ntpServidor1 = "ntp.meucampus.local";  // padrão: pool.ntp.br
+cfg.ntpServidor2 = "a.st1.ntp.br";         // padrão
+cfg.ntpServidor3 = "";                     // não usar
+cfg.ntp = true;                            // false desativa o NTP
+```
+
+  Também é possível trocar em tempo de execução: `definirServidoresNtp("10.0.0.1", "pool.ntp.br")`.
+
+| Método | Retorno |
+|---|---|
+| `horarioValido()` | `true` se já sincronizou desde o boot |
+| `horarioEpoch()` | `uint32_t`, segundos desde 1970 (UTC); `0` se inválido |
+| `horarioISO8601()` | `String` `"2026-11-17T16:30:00Z"`; vazia se inválido |
+| `horarioISO8601(buf, tam)` | mesmo valor em buffer (`RelogioNTP::TAM_ISO8601` = 21 bytes), sem usar heap |
+| `horarioStart()` | `uint32_t`, epoch (s, UTC) em que o dispositivo ligou; `0` até a 1ª sincronização |
+| `atrasoPrimeiraSyncMs()` | `uint32_t`, **milissegundos** entre o boot e a 1ª sincronização; `0` até lá |
+| `horarioUltimaSync()` | `uint32_t`, epoch (s, UTC) da última sincronização; `0` se nunca |
+| `relogio()` | acesso a `aguardarSincronizacao(ms)`, `ultimaSincronizacao()` etc. |
+
+O estado JSON publicado em `<base>/<nome>` ganha o campo `"timestamp"` (ISO 8601) quando o horário é válido.
+Em `health`, `"uptime"` é o epoch (s) em que o dispositivo ligou e `"ntp_d"` é o tempo (ms) entre o boot e a
+1ª sincronização; ambos valem `0` até a 1ª sincronização. O horário de ligação é calculado uma única vez
+(1ª sincronização menos o tempo desde o boot) e tem precisão de cerca de 1 s.
+O epoch é `uint32_t` (vale até 2106) e não `float`, que perde precisão com valores dessa grandeza.
+Requer o core Arduino do ESP8266 3.0 ou superior.
+
 ## Tópicos
 
 | Tópico | Conteúdo |
 |---|---|
-| `<base>/<nome>` | estado em JSON (RSSI, heap, stack, uptime + campos da filha), periódico |
+| `<base>/<nome>` | **status** em JSON: `id`, `health` (RSSI, heap, stack, uptime = horário de ligação, ntp_d), `timestamp`; periódico (`intervaloEstadoMs`) |
+| `<base>/<nome>/medicao` | **medição** em JSON: `id` e `measurements` (preenchido pela filha em `montarMedicao()`); periódico (`intervaloMedicaoMs`) |
 | `<base>/<nome>/cmd` | comandos recebidos (chamam `atuador()`) |
 | `<base>/<nome>/available` | `online` (retido) / `offline` (LWT) |
 | `<base>/<nome>/ota` | resultado da atualização por HTTP (`iniciando`, `recusado`, `sem atualizacao`, `falha: ...`) |

@@ -19,6 +19,22 @@ DispositivoBase::DispositivoBase(const ConfigDispositivo& config, const PinosSin
 // ---------------------------------------------------------------------------
 
 void DispositivoBase::iniciar() {
+  // ESP.random() usa o gerador por hardware do ESP8266 (sem semente).
+  // Sorteado uma vez por boot: 24 bits = 6 dígitos hex, nunca 0.
+  if (_idSessao == 0) {
+    do {
+      _idSessao = ESP.random() & 0xFFFFFF;
+    } while (_idSessao == 0);
+  }
+  _sequencia = 0;
+
+  {
+    String mac = WiFi.macAddress();   // "A1:B2:C3:D4:E5:F6"
+    mac.replace(":", "");
+    mac.toLowerCase();
+    _macId = mac.substring(8);        // últimos 4 dígitos hex: "e5f6"
+  }
+
   if (_cfg.anexarMac) {
     String mac = WiFi.macAddress();   // "A1:B2:C3:D4:E5:F6"
     mac.replace(":", "");
@@ -44,6 +60,11 @@ void DispositivoBase::iniciar() {
   WiFi.setAutoReconnect(true);
   WiFi.hostname(_cfg.nomeCliente);
   WiFi.begin(_cfg.ssid.c_str(), _cfg.senhaWifi.c_str());
+
+  // NTP: não bloqueia; o SNTP sincroniza assim que o Wi-Fi conectar e repete até conseguir.
+  if (_cfg.ntp) {
+    _relogio.begin(_cfg.ntpServidor1.c_str(), _cfg.ntpServidor2.c_str(), _cfg.ntpServidor3.c_str());
+  }
 
   configurarMqtt();
 
@@ -91,6 +112,9 @@ void DispositivoBase::loop() {
     if (agora - _tEstado >= _cfg.intervaloEstadoMs) {
       publicarEstado();
     }
+    if (agora - _tMedicao >= _cfg.intervaloMedicaoMs) {
+      publicarMedicao();
+    }
     if (agora - _tDisponibilidade >= _cfg.intervaloDisponibilidadeMs) {
       publicarDisponibilidade();
     }
@@ -111,7 +135,8 @@ void DispositivoBase::loop() {
 
 void DispositivoBase::montarTopicos() {
   _topicoDispositivo = _cfg.topicoBase + "/" + _cfg.nomeCliente;
-  _topicoEstado = _topicoDispositivo;
+  _topicoEstado = _topicoDispositivo;                  // <base>/<nome>
+  _topicoMedicao = _topicoDispositivo + "/medicao";    // <base>/<nome>/medicao
   _topicoComando = _topicoDispositivo + "/cmd";
   _topicoDisponibilidade = _topicoDispositivo + "/available";
 }
@@ -162,6 +187,7 @@ void DispositivoBase::aoConectarMqtt(bool sessaoExistente) {
   publicarDisponibilidade();
   sincronizarHomeAssistant();
   publicarEstado();
+  publicarMedicao();
 
   aoConectar();
 }
@@ -232,18 +258,47 @@ void DispositivoBase::publicarDisponibilidade() {
 bool DispositivoBase::publicarEstado() {
   _tEstado = millis();
 
+  // Status: saúde do dispositivo, timestamp e id. As medições vão em <base>/<nome>/medicao.
   JsonDocument doc;
-  doc["id"] = WiFi.getHostname(); 
+  identificarMensagem(doc);       // "id" único da mensagem: MAC + sessão + sequência
   JsonObject saude = doc["health"].to<JsonObject>();
   saude["RSSI"] = WiFi.RSSI();
   saude["heap"] = ESP.getFreeHeap();
   saude["stack"] = ESP.getFreeContStack();
-  saude["uptime"] = millis() / 1000;
-  montarEstado(doc);
+  saude["uptime"] = _relogio.horarioInicio();           // epoch (s, UTC) em que ligou; 0 até a 1ª sincronização
+  saude["ntp_d"] = _relogio.atrasoPrimeiraSyncMs();     // ms entre o boot e a 1ª sincronização; 0 até lá
+  char horario[RelogioNTP::TAM_ISO8601];
+  if (_relogio.horarioISO8601(horario, sizeof(horario))) {
+    doc["timestamp"] = horario;   // ArduinoJson copia a string
+  }
+  montarEstado(doc);              // campos extras opcionais da filha
 
   String payload;
   serializeJson(doc, payload);
   return publicar(_topicoEstado, payload);
+}
+
+bool DispositivoBase::publicarMedicao() {
+  _tMedicao = millis();
+
+  // Medição: apenas id e measurements (preenchido pela filha em montarMedicao()).
+  JsonDocument doc;
+  identificarMensagem(doc);       // "id" único da mensagem: MAC + sessão + sequência
+  montarMedicao(doc);
+
+  String payload;
+  serializeJson(doc, payload);
+  return publicar(_topicoMedicao, payload);
+}
+
+void DispositivoBase::identificarMensagem(JsonDocument& doc) {
+  // id = <4 hex do MAC><6 hex da sessão><sequência, mínimo 6 dígitos decimais>
+  // ex.: "e5f63fa91c000042" -> mac "e5f6", sessão "3fa91c", mensagem 42.
+  // Os 10 primeiros caracteres têm largura fixa; o resto é a sequência.
+  char id[32];
+  snprintf(id, sizeof(id), "%s%06lx%06lu", _macId.c_str(),
+           static_cast<unsigned long>(_idSessao), static_cast<unsigned long>(proximaSequencia()));
+  doc["id"] = id;
 }
 
 void DispositivoBase::sincronizarHomeAssistant() {
@@ -253,7 +308,7 @@ void DispositivoBase::sincronizarHomeAssistant() {
   rssi.idObjeto = "rssi";
   rssi.nome = "Sinal Wi-Fi";
   rssi.topicoEstado = _topicoEstado.c_str();
-  rssi.templateValor = "{{ value_json.RSSI }}";
+  rssi.templateValor = "{{ value_json.health.RSSI }}";
   rssi.classeDispositivo = "signal_strength";
   rssi.unidade = "dBm";
   rssi.classeEstado = "measurement";

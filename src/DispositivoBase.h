@@ -10,6 +10,7 @@
 #include "HomeAssistantDiscovery.h"
 #include "OtaHttpCliente.h"
 #include "OtaHttpServidor.h"
+#include "RelogioNTP.h"
 
 /**
  * Configuração de um dispositivo.
@@ -41,8 +42,17 @@ struct ConfigDispositivo {
   String versaoSw = "1.0.0";
   String versaoHw = "1.0";
 
+  // Relógio (NTP). Horário sempre em UTC. A sincronização é tentada a cada boot e
+  // o horário continua correndo se o servidor ficar inacessível.
+  // Até 3 servidores (nome ou IP); deixe vazio os que não for usar.
+  bool ntp = true;
+  String ntpServidor1 = "pool.ntp.br";
+  String ntpServidor2 = "a.st1.ntp.br";
+  String ntpServidor3 = "time.google.com";
+
   // Temporização (ms)
-  uint32_t intervaloEstadoMs = 20000;          // publicação do estado (JSON)
+  uint32_t intervaloEstadoMs = 20000;          // publicação do status/saúde (JSON) em <base>/<nome>
+  uint32_t intervaloMedicaoMs = 20000;         // publicação da medição (JSON) em <base>/<nome>/medicao
   uint32_t intervaloDisponibilidadeMs = 60000; // publicação de "online"
   uint32_t intervaloSensorMs = 5000;           // chamada de sensor()
   uint32_t intervaloReconexaoMs = 5000;        // tentativas de conexão ao broker
@@ -86,8 +96,9 @@ struct ConfigDispositivo {
  *   - atuador(payload): executa um comando recebido em <base>/<nome>/cmd;
  *   - sensor(): lê o(s) sensor(es) e publica o que for necessário.
  *
- * Tópicos:
- *   <base>/<nome>            estado (JSON)
+ * Tópicos (com <base> = "cm/<tipo de sensor>"):
+ *   <base>/<nome>            status (JSON): id, health, timestamp
+ *   <base>/<nome>/medicao    medição (JSON): id, measurements
  *   <base>/<nome>/cmd        comandos
  *   <base>/<nome>/available  "online" / "offline" (LWT)
  *   <base>/<nome>/ota        resultado da atualização por HTTP
@@ -110,8 +121,42 @@ class DispositivoBase {
   bool wifiConectado() const { return WiFi.status() == WL_CONNECTED; }
   bool mqttConectado() { return _mqtt.connected(); }
 
-  // Publica o estado imediatamente (além da publicação periódica).
+  // Publica o status (saúde do dispositivo) imediatamente, além da publicação periódica.
   bool publicarEstado();
+
+  // Publica a medição imediatamente, além da publicação periódica.
+  bool publicarMedicao();
+
+  // ----- Horário (NTP, UTC) -----------------------------------------------
+
+  /** true se o horário é confiável (sincronizou ao menos uma vez desde o boot). */
+  bool horarioValido() const { return _relogio.horarioValido(); }
+
+  /** Unix epoch em segundos (uint32_t). 0 se ainda não houver horário válido. */
+  uint32_t horarioEpoch() const { return _relogio.epoch(); }
+
+  /** "2026-11-17T16:30:00Z" em buf (mín. RelogioNTP::TAM_ISO8601 bytes). false se inválido. */
+  bool horarioISO8601(char* buf, size_t tam) const { return _relogio.horarioISO8601(buf, tam); }
+
+  /** Mesmo que acima, como String (usa heap). "" se inválido. */
+  String horarioISO8601() const { return _relogio.horarioISO8601(); }
+
+  /** Epoch (s, UTC) em que o dispositivo ligou. 0 até a 1ª sincronização NTP. */
+  uint32_t horarioStart() const { return _relogio.horarioInicio(); }
+
+  /** Tempo em ms entre o boot e a 1ª sincronização NTP. 0 até lá. */
+  uint32_t atrasoPrimeiraSyncMs() const { return _relogio.atrasoPrimeiraSyncMs(); }
+
+  /** Epoch (s, UTC) da última sincronização NTP. 0 se nunca sincronizou. */
+  uint32_t horarioUltimaSync() const { return _relogio.ultimaSincronizacao(); }
+
+  /** Troca os servidores NTP em tempo de execução. */
+  void definirServidoresNtp(const char* s1, const char* s2 = nullptr, const char* s3 = nullptr) {
+    _relogio.begin(s1, s2, s3);
+  }
+
+  /** Acesso completo ao relógio (ex.: aguardarSincronizacao(), ultimaSincronizacao()). */
+  RelogioNTP& relogio() { return _relogio; }
 
   /**
    * Baixa o firmware da URL (HTTP) e reinicia se a atualização der certo.
@@ -138,8 +183,17 @@ class DispositivoBase {
   /** Chamado a cada conexão (ou reconexão) ao broker, após o setup padrão. */
   virtual void aoConectar() {}
 
-  /** Acrescenta campos ao JSON de estado publicado periodicamente. */
+  /**
+   * Acrescenta campos extras ao JSON de STATUS (<base>/<nome>), que já traz
+   * id, health e timestamp. Não coloque medições aqui: use montarMedicao().
+   */
   virtual void montarEstado(JsonDocument& doc) { (void)doc; }
+
+  /**
+   * Preenche o JSON de MEDIÇÃO (<base>/<nome>/medicao), que já traz o id.
+   * A classe filha adiciona aqui o array "measurements".
+   */
+  virtual void montarMedicao(JsonDocument& doc) { (void)doc; }
 
   /** Cria as entidades do dispositivo no Home Assistant. */
   virtual void configurarHomeAssistant(HomeAssistantDiscovery& ha) { (void)ha; }
@@ -166,8 +220,21 @@ class DispositivoBase {
   const String& nomeCliente() const { return _cfg.nomeCliente; }
   const String& topicoBase() const { return _cfg.topicoBase; }
   const String& topicoEstado() const { return _topicoEstado; }
+  const String& topicoMedicao() const { return _topicoMedicao; }
   const String& topicoComando() const { return _topicoComando; }
   const String& topicoDisponibilidade() const { return _topicoDisponibilidade; }
+
+  /**
+   * Identificação única de mensagens (campo "id" do JSON).
+   *   id = <4 hex do MAC><6 hex da sessão><sequência, 6 dígitos decimais ou mais>
+   *   ex.: "e5f63fa91c000042"
+   * Se a sessão mudou, o dispositivo reiniciou; se a sequência pulou, houve
+   * mensagem perdida. publicarEstado() e publicarMedicao() já preenchem o "id";
+   * as filhas podem usar identificarMensagem() em qualquer outro JSON que publiquem.
+   */
+  uint32_t idSessao() const { return _idSessao; }
+  uint32_t proximaSequencia() { return ++_sequencia; }
+  void identificarMensagem(JsonDocument& doc);
 
   void log(const char* formato, ...);
 
@@ -188,9 +255,11 @@ class DispositivoBase {
   HomeAssistantDiscovery _ha;
   OtaHttpCliente _otaCliente;
   OtaHttpServidor _otaServidor;
+  RelogioNTP _relogio;
 
   String _topicoDispositivo;
   String _topicoEstado;
+  String _topicoMedicao;
   String _topicoComando;
   String _topicoDisponibilidade;
 
@@ -198,12 +267,17 @@ class DispositivoBase {
   bool _descartarMensagem = false;
 
   uint32_t _tEstado = 0;
+  uint32_t _tMedicao = 0;
   uint32_t _tDisponibilidade = 0;
   uint32_t _tSensor = 0;
   uint32_t _tConexao = 0;
   bool _tentouConectar = false;
   bool _otaIniciado = false;
   bool _depuracao = false;
+
+  uint32_t _idSessao = 0;   // sorteado em iniciar(), 24 bits
+  uint32_t _sequencia = 0;  // contador por mensagem
+  String _macId;            // últimos 4 dígitos hex do MAC
 };
 
 #endif
