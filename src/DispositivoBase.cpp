@@ -19,6 +19,22 @@ DispositivoBase::DispositivoBase(const ConfigDispositivo& config, const PinosSin
 // ---------------------------------------------------------------------------
 
 void DispositivoBase::iniciar() {
+  // ESP.random() usa o gerador por hardware do ESP8266 (sem semente).
+  // Sorteado uma vez por boot: 24 bits = 6 dígitos hex, nunca 0.
+  if (_idSessao == 0) {
+    do {
+      _idSessao = ESP.random() & 0xFFFFFF;
+    } while (_idSessao == 0);
+  }
+  _sequencia = 0;
+
+  {
+    String mac = WiFi.macAddress();   // "A1:B2:C3:D4:E5:F6"
+    mac.replace(":", "");
+    mac.toLowerCase();
+    _macId = mac.substring(8);        // últimos 4 dígitos hex: "e5f6"
+  }
+
   if (_cfg.anexarMac) {
     String mac = WiFi.macAddress();   // "A1:B2:C3:D4:E5:F6"
     mac.replace(":", "");
@@ -244,7 +260,7 @@ bool DispositivoBase::publicarEstado() {
 
   // Status: saúde do dispositivo, timestamp e id. As medições vão em <base>/<nome>/medicao.
   JsonDocument doc;
-  doc["id"] = WiFi.getHostname();
+  identificarMensagem(doc);       // "id" único da mensagem: MAC + sessão + sequência
   JsonObject saude = doc["health"].to<JsonObject>();
   saude["RSSI"] = WiFi.RSSI();
   saude["heap"] = ESP.getFreeHeap();
@@ -267,12 +283,22 @@ bool DispositivoBase::publicarMedicao() {
 
   // Medição: apenas id e measurements (preenchido pela filha em montarMedicao()).
   JsonDocument doc;
-  doc["id"] = WiFi.getHostname();
+  identificarMensagem(doc);       // "id" único da mensagem: MAC + sessão + sequência
   montarMedicao(doc);
 
   String payload;
   serializeJson(doc, payload);
   return publicar(_topicoMedicao, payload);
+}
+
+void DispositivoBase::identificarMensagem(JsonDocument& doc) {
+  // id = <4 hex do MAC><6 hex da sessão><sequência, mínimo 6 dígitos decimais>
+  // ex.: "e5f63fa91c000042" -> mac "e5f6", sessão "3fa91c", mensagem 42.
+  // Os 10 primeiros caracteres têm largura fixa; o resto é a sequência.
+  char id[32];
+  snprintf(id, sizeof(id), "%s%06lx%06lu", _macId.c_str(),
+           static_cast<unsigned long>(_idSessao), static_cast<unsigned long>(proximaSequencia()));
+  doc["id"] = id;
 }
 
 void DispositivoBase::sincronizarHomeAssistant() {

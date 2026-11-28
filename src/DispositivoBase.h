@@ -224,6 +224,18 @@ class DispositivoBase {
   const String& topicoComando() const { return _topicoComando; }
   const String& topicoDisponibilidade() const { return _topicoDisponibilidade; }
 
+  /**
+   * Identificação única de mensagens (campo "id" do JSON).
+   *   id = <4 hex do MAC><6 hex da sessão><sequência, 6 dígitos decimais ou mais>
+   *   ex.: "e5f63fa91c000042"
+   * Se a sessão mudou, o dispositivo reiniciou; se a sequência pulou, houve
+   * mensagem perdida. publicarEstado() e publicarMedicao() já preenchem o "id";
+   * as filhas podem usar identificarMensagem() em qualquer outro JSON que publiquem.
+   */
+  uint32_t idSessao() const { return _idSessao; }
+  uint32_t proximaSequencia() { return ++_sequencia; }
+  void identificarMensagem(JsonDocument& doc);
+
   void log(const char* formato, ...);
 
  private:
@@ -262,6 +274,10 @@ class DispositivoBase {
   bool _tentouConectar = false;
   bool _otaIniciado = false;
   bool _depuracao = false;
+
+  uint32_t _idSessao = 0;   // sorteado em iniciar(), 24 bits
+  uint32_t _sequencia = 0;  // contador por mensagem
+  String _macId;            // últimos 4 dígitos hex do MAC
 };
 
 #endif
